@@ -69,6 +69,10 @@ function gunClient.init(tool)
 	local reloading = false
 	local canRespond = false
 	local gunMode
+	
+	local inputBeganConnection --
+	local inputEndedConnection
+
 
 	--// Camera Settings //--
 	local CameraSettings = {
@@ -103,7 +107,7 @@ function gunClient.init(tool)
 	crouchAnim.Priority = Enum.AnimationPriority.Action
 	recoilAnim.Priority = Enum.AnimationPriority.Action
 	reloadAnim.Priority = Enum.AnimationPriority.Action
-	idleAnim.Priority = Enum.AnimationPriority.Action4
+	idleAnim.Priority = Enum.AnimationPriority.Movement
 --	swapRAnim.Priority = Enum.AnimationPriority.Action
 --	swapLAnim.Priority = Enum.AnimationPriority.Action
 
@@ -214,6 +218,31 @@ function gunClient.init(tool)
 		end
 	end
 	
+	local function AlignGun(targetPos)
+		local char = player.Character or player.CharacterAdded:Wait()
+		local upper = char:WaitForChild("UpperTorso")
+		local waist = upper:WaitForChild("Waist")
+
+		local DEFAULT_C0 = waist.C0
+
+
+		if targetPos then
+			local torsoPos = upper.Position
+			local lookCF = CFrame.lookAt(torsoPos, targetPos)
+
+			-- Convert world rotation into local joint rotation
+			local relative = upper.CFrame:ToObjectSpace(lookCF)
+
+			waist.C0 = waist.C0:Lerp(
+				CFrame.new(DEFAULT_C0.Position) * relative.Rotation,
+				0.25
+			)
+		else
+			-- No target, return to normal
+			waist.C0 = waist.C0:Lerp(DEFAULT_C0, 0.15)
+		end
+
+	end
 	
 	local function fire()
 		print("fired")
@@ -226,7 +255,7 @@ function gunClient.init(tool)
 			if ammo.Value >0 then
 				-- Check if player is aiming (OTS camera system)
 				local isAiming = player:FindFirstChild("IsAiming") and player.IsAiming.Value
-				print(isAiming)
+			
 				-- Adjust spread based on aiming state
 				local currentSpread = isAiming and (spread * 0.3) or spread -- Reduced spread when aiming
 				
@@ -234,6 +263,7 @@ function gunClient.init(tool)
 				local part = workspace:FindPartOnRayWithIgnoreList(ray, {character, bulletStorage}, false, true)
 				
 				if not part or part.Parent:FindFirstChildOfClass("Humanoid") or part.Parent.Parent:FindFirstChildOfClass("Humanoid") then
+
 					if shotgun then
 						spawn(function()
 							for i = 1, pellets, 1 do
@@ -248,7 +278,7 @@ function gunClient.init(tool)
 									fireEvent:FireServer(tool.Name, endPos, true)
 								else
 									fireEvent:FireServer(tool.Name, endPos, false)
-									totalFired += 1
+									totalFired = totalFired + 1
 								end
 							end
 						end)
@@ -257,7 +287,7 @@ function gunClient.init(tool)
 						local part,endPos = workspace:FindPartOnRayWithIgnoreList(ray, {bulletStorage, character}, false, true)
 						local spreadCalculation = currentSpread * (endPos - tool.barrel.Position).magnitude
 						endPos += Vector3.new(math.random(-spreadCalculation,spreadCalculation)/100, math.random(-spreadCalculation,spreadCalculation)/100, math.random(-spreadCalculation,spreadCalculation)/100)
-
+						AlignGun(endPos)
 						fireEvent:FireServer(tool.Name, endPos)
 						totalFired += 1
 						
@@ -280,8 +310,14 @@ function gunClient.init(tool)
 							return response,totalWhenFired
 						end
 					end
+		--[[		idleAnim:Stop()
 					recoilAnim:Play()
 					print("recoil")
+					task.wait(recoilAnim.length)
+					idleAnim:AdjustWeight(0.1)
+					idleAnim:Play()
+		]]
+					CameraSystem:ApplyRecoil(mainConfigs:FindFirstChild("recoil").Value)
 				end
 			else
 				emptySound:Play()
@@ -309,12 +345,11 @@ function gunClient.init(tool)
 	
 	--\\ interaction
 	inputService.InputBegan:Connect(function(input, gpe)
-		print("")
 		if equipped and not gpe then
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
 				mouseDown = true
 				mouseBegan()
-				print("Mouse Begain")
+				print("fired")
 			elseif input.UserInputType == Enum.UserInputType.Keyboard then
 				if input.KeyCode == Enum.KeyCode.LeftShift then
 					if not holstering and not crouching and not mouseDown then
@@ -345,7 +380,6 @@ function gunClient.init(tool)
 		end
 	end)
 	
-	
 	inputService.InputEnded:Connect(function(input, gpe)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			mouseDown = false
@@ -357,6 +391,7 @@ function gunClient.init(tool)
 			end
 		end
 	end)
+	
 end
 
 
